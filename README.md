@@ -30,9 +30,11 @@
 
 ## 5. SIDECAR
 
+## 6. helm
+
+* helm [바로가기](./6.helm/README.md)
 
 ## Convert_To_K8S
 * K8s Ingress Controller 구성
 * 데이터베이스 배포 (mariadb, mongo, redis)
 * 서비스 전환
-
