@@ -26,7 +26,13 @@
 
 * 쿠버네티스 CICD [바로가기](./3.CICD/kubernetes_deploy.md)
 
+## 4. CKA
+
+## 5. SIDECAR
+
+
 ## Convert_To_K8S
 * K8s Ingress Controller 구성
 * 데이터베이스 배포 (mariadb, mongo, redis)
 * 서비스 전환
+
