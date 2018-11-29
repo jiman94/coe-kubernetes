@@ -1,6 +1,3 @@
-# 수정중입니다.
-# 간단한 서버 + 마리아디비로 구성된 차트 생성 예제 구현할 예정
-
 # Helm
 
 Helm은 쿠버네티스 어플리케이션 관리를 도와주는 관리 툴입니다.
@@ -280,14 +277,14 @@ MariaDB [(none)]> show databases;
 ### 4.1 chart create
 
 ~~~bash
-$ helm create create-chart
-Creating create-chart
+$ helm create customer-service
+Creating customer-service
 ~~~
 
-create-chart라는 폴더가 생성 되고 해당 폴더에는 아래와 같은 파일과 폴더를 가집니다.
+customer-service라는 폴더가 생성 되고 해당 폴더에는 아래와 같은 파일과 폴더를 가집니다.
 
 ~~~bash
-$ ls create-chart
+$ ls customer-service
 Chart.yaml  charts  templates  values.yaml
 ~~~
 
@@ -320,7 +317,230 @@ Helm은 charts라는 패키징 형식을 사용합니다.
 * templates/NOTES.txt - 사용자에게 사용방법을 알려주는 파일입니다.(옵션)
 
 
-수정중입니다.
+
+### 4.3 chart 만들기
+
+구성할 구조는 아래와 같습니다.
+
+![](../image/helm-customer.png)
+
+고객이 등록 요청을 하게 되면 고객의 정보를 받아서 rabbitmq와 mariadb에 정보를 넣는 구조입니다.
+
+mariadb와 rabbitmq의 경우 stable 레파지토리에서 제공되는 차트를 이용 할 것입니다.
+
+물론 각각 새로 생설할 customer-service 차트와 mariadb 차트, rabbitmq 차트를 다 별도로 실행시켜도 되지만
+
+customer-service의 경우 mariadb와 rabbitmq에 종속성이 있기 때문에 위에서 설명드린 charts 디렉토리에 두개의 차트를 넣어서 기동해보도록 하겠습니다.
+
+먼저 4.1에서 생성한 디렉토리안의 charts 폴더에
+
+~~~bash
+$ helm fetch [차트명]
+~~~
+
+와 같은 명령어를 이용해 종속성이 있는 차트를 넣어줍니다.
+
+> 물론 requirements.yaml에 필요한 종속성 차트를 기입하고 dep up 명령어를 사용하셔도 됩니다.
+
+
+만약 위와 같이 하였다면 아래와 같은 폴더 구조를 가지게 됩니다.
+
+~~~
+customer-service
+  Chart.yaml
+  values.yaml
+  charts
+      mairadb
+        ...
+      rabbitmq
+        ...
+  templates
+      deployment.yaml
+      service.yaml
+      ...
+~~~
+
+customer-service는 스프링 부트 어플리케이션입니다.
+
+application.yml에서 rabbitmq와 datasource 부분을 아래와 같이 수정합니다.
+
+~~~yml
+spring:
+  rabbitmq:
+      host: ${RABBITMQ_SERVER_URL:coe-helm-rabbitmq}
+      port: ${RABBITMQ_SERVER_PORT:5672}
+      username: username
+      password: password
+  datasource:
+      sql-script-encoding: UTF-8
+      driverClassName: org.mariadb.jdbc.Driver
+      url: jdbc:mariadb://coe-helm-mariadb:3306/coe
+      username: ${DB_USERNAME:root}
+      password: ${DB_PASSWORD:root}
+~~~
+
+이후 빌드 및 도커 빌드, 푸쉬를 통하여 도커 이미지를 업로드합니다.
+
+다음으로
+
+customer-service/charts/mariadb/values.yaml 파일을 열어서
+
+아래와 같이 수정을 합니다.
+
+~~~yaml
+..
+rootUser:
+  password: root
+  forcePassword: true
+db:
+  user: coe
+  password: coe
+  name: coe
+  forcePassword: true
+replication:
+  enabled: false
+  ..
+master:
+  ..
+  persistence:
+    enabled: false
+  ..
+~~~
+
+다음으로 customer-service/charts/rabbitmq/values.yaml 파일을 열어서 아래와 같이 수정합니다.
+
+~~~yaml
+..
+rabbitmq:
+  username: username
+  password: password
+  ..
+service:  
+  type: NodePort
+  ..
+persistence:
+    enabled: false
+  ..
+~~~
+
+이제 customer-service/values.yaml 파일을 열어서 아래와 같이 수정합니다.
+
+~~~yaml
+...
+image:
+  repository: 도커 이미지 위치
+  tag: 도커 이미지 태그
+  pullPolicy: Always
+...
+service:
+  type: NodePort
+  port: 8080
+
+initContainer:
+  mariadb:
+    name: coe-helm-mariadb:3306
+    image:
+      repository: bitnami/mariadb
+      tag: 10.1.37
+    password: root
+ingress:
+  enabled: false
+...
+~~~
+
+위에서 initContainer 부분은 customer-service가 작동 할 때 mariadb가 정상적으로 기동 되었는지 확인 하기 위한 변수입니다.
+
+해당 변수 사용은 customer-service/templates/deployment.yaml 에서 사용됩니다.
+
+~~~yaml
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  ...
+  ...
+spec:
+  ...
+  template:
+    ...
+    spec:
+      initContainers:
+        - name: init-mariadb
+          image: "{{ .Values.initContainer.mariadb.image.repository }}:{{ .Values.initContainer.mariadb.image.tag }}"
+          command: ['sh', '-c', 'until mysqladmin status -uroot -proot -h coe-helm-mariadb; do echo waiting for mariadb; sleep 2; done;']
+      containers:
+          ...
+            ports:
+              - name: http
+                containerPort: 8080
+                protocol: TCP
+
+~~~
+
+deployment의 pod 생성 전에 initContainer를 이용하여 해당 서비스가 바라보는 mariadb가 정상적으로 작동 되었는지 확인합니다.
+정상적으로 mariadb가 기동이 되었다면 containers에 기술된 이미지들이 팟으로 기동됩니다.
+
+이후 작성한 차트의 문법이 정상적인지 확인하기 위해서 아래의 명령어를 실행합니다.
+
+~~~bash
+//customer-service 경로에서 실행
+$ helm lint .
+==> Linting .
+[INFO] Chart.yaml: icon is recommended
+
+1 chart(s) linted, no failures
+~~~
+
+문법에 문제가 없다면 아래의 명령을 통해서 helm 차트를 설치합니다.
+
+~~~bash
+//customer-service 경로에서 실행
+$ helm install -n coe-helm .
+~~~
+
+정상적으로 실행이 되었다면 postman등의 툴을 이용하여 고객 등록을 해봅니다.
+
+![](../image/helm-post.png)
+
+정상적으로 response가 왔으면 rabbitmq에서 정상적으로 큐에 들어갔는지 확인합니다.
+
+![](../image/helm-rabbitmq.png)
+
+마지막으로 mariadb에 정상적으로 데이터가 들어갔는지 확인합니다.
+
+~~~bash
+kbuectl exec -it coe-helm-mariadb-0 bash
+
+Command 'kbuectl' not found, did you mean:
+
+ command 'kubectl' from snap kubectl (1.12.2)
+
+See 'snap info <snapname>' for additional versions.
+
+actmember@act-kube-master:~/helmtest/customer-service$ kubectl exec -it coe-helm-mariadb-0 bash
+I have no name!@coe-helm-mariadb-0:/$ mysql -u root -p
+Enter password:
+Welcome to the MariaDB monitor.  Commands end with ; or \g.
+Your MariaDB connection id is 938
+Server version: 10.1.37-MariaDB Source distribution
+
+Copyright (c) 2000, 2018, Oracle, MariaDB Corporation Ab and others.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+MariaDB [(none)]> use coe;
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+MariaDB [coe]> select * from customer;
++-------------+---------------------+---------+
+| customer_id | email               | name    |
++-------------+---------------------+---------+
+|           1 | act@act.com         | act     |
++-------------+---------------------+---------+
+1 rows in set (0.00 sec)
+~~~
+
 
 ## 99. 참고
 https://docs.helm.sh/
