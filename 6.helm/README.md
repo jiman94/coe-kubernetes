@@ -364,6 +364,8 @@ customer-service는 스프링 부트 어플리케이션입니다.
 
 application.yml에서 rabbitmq와 datasource 부분을 아래와 같이 수정합니다.
 
+해당 소스는 coe-samle-service 에 helm 브랜치에 존재합니다.
+
 ~~~yml
 spring:
   rabbitmq:
