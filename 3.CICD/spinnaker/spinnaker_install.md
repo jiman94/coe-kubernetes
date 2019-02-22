@@ -87,7 +87,7 @@ https://www.minio.io/에서 원하는 방법을 사용하여 생성합니다.
 
 KUBERNETES에 생성할 것이라서 메인페이지에서 Kubernetes를 선택하고 정보를 추가합니다. 
 
-![](./minio.png)
+![](./image/minio.png)
 
 생성된 manifest에서 'namespace spinnaker' 정보만 추가했습니다. 
 ```yaml
@@ -174,7 +174,7 @@ hal deploy connect
 
 {environment-ip}:9000으로 Spinnaker UI에 접속합니다. 
 
-![](./spinnaker-ui.png)
+![](./image/spinnaker-ui.png)
 
 
 
@@ -195,7 +195,7 @@ $ hal config provider kubernetes account add {k8s-prod} --provider-version v1 --
 ```
 Spinnaker UI에서 리소스 생성 시 아래와 같이 원하는 account를 선택하여 배포할 수 있습니다. 
 
-![](multi-account.png)
+![](./image/multi-account.png)
 
 ## Public IP, DNS 사용 시
 Front에서 Gate로 API 요청 시 같은 호스트 정보로 호출하기 때문에 동일하지 않으면(다른 호스트 또는 다른 아이피) 아래와 같이 추가
